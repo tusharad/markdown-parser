@@ -5,7 +5,6 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import MarkDown.Common.Types
 import qualified Data.Text as T
--- import qualified Text.Megaparsec.Char.Lexer as L
 
 atom :: Parser MarkDown
 atom = do
@@ -28,15 +27,15 @@ atom = do
 parseLine :: Parser MarkDown
 parseLine = do
     res <- takeWhileP Nothing (/= '\n')
-    let x = parse ((parseItalicBold <|> parseBold <|> parseItalic <|> parseLink <|> parseCode <|> parseText) `sepBy` (char ' ')) "" res
+    let x = parse ((parseItalicBold <|> parseBold <|> parseItalic <|> parseLink <|> parseEscapeCode <|>  parseCode <|> parseText) `sepBy` (char ' ')) "" res
     case x of
-        Left _ -> return (MLine [MParagraph res])
-        Right r -> return (MLine r)
+      Left _ -> return (MLine [MParagraph res])
+      Right r -> return (MLine r)
 
 parseText :: Parser MarkDown
 parseText = do
     res <- takeWhileP Nothing (/= ' ')
-    return (MText res)
+    return (MWord res)
 
 parseHeading :: Parser MarkDown
 parseHeading = do
@@ -44,7 +43,9 @@ parseHeading = do
     res <- takeWhileP (Just "number of #'s") (=='#')
     space
     headingText <- takeWhileP Nothing (/='\n')
-    pure (MHeading headingText (T.length res + 1))
+    case parse atom "" headingText of
+        Left _ -> pure (MHeading (MWord headingText) (T.length res + 1)) 
+        Right r -> pure (MHeading r (T.length res + 1))
 
 parseParagraph :: Parser MarkDown
 parseParagraph = do
@@ -84,14 +85,18 @@ parseOrderedList = do
     _ <- char '.'
     space
     res <- takeWhileP Nothing (/='\n')
-    pure (MOrderedList res)
+    case parse parseLine "" res of
+        Left _ -> pure (MOrderedList (MWord res))
+        Right r -> pure (MOrderedList r)
 
 parseUnorderedList :: Parser MarkDown
 parseUnorderedList = do
     _ <- char '*' <|> char '-' <|> char '+'
     space
     res <- takeWhileP Nothing (/='\n')
-    pure (MUnOrderedList res)
+    case parse parseLine "" res of
+        Left _ -> pure (MUnOrderedList (MWord res))
+        Right r -> pure (MUnOrderedList r)
 
 parseLink :: Parser MarkDown
 parseLink = do

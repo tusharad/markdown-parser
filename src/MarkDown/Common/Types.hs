@@ -6,22 +6,21 @@ import Text.Megaparsec
 
 type Parser = Parsec Void Text
 
-data MarkDown =  
-      MHeading Text Int 
+data MarkDown =
+      MHeading MarkDown Int 
     | MBold Text
     | MItalic Text
     | MItalicBold Text
     | MLineQuotes MarkDown
     | MBlockQuotes Text
     | MHorizontal
-    | MOrderedList Text
-    | MUnOrderedList Text
+    | MOrderedList MarkDown
+    | MUnOrderedList MarkDown
     | MCode Text
     | MEscapeCode Text
     | MLink Text Text
     | MImage Text Text
-    | MText Text
+    | MWord Text
     | MParagraph Text
     | MLine [MarkDown]
     deriving (Show,Eq)
-

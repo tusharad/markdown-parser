@@ -21,7 +21,9 @@ main = do
     case res of
       Left err -> print err
       Right parsedStructure -> do
-        let x = joinMText (joinMLine (concatParagraphs (concatTexts parsedStructure []) []) []) []
+        let x = joinMWord (joinMLine (concatParagraphs (concatTexts parsedStructure []) []) []) []
         let y = concatParagraphs x []
+        print y
+        putStrLn "\n\n\n"
+        print (toHTML y "")
         T.writeFile outputFile (toHTML y "")
-      
