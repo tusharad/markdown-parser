@@ -132,5 +132,7 @@ test-suite markdown-parser-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.17.2.1,
-        markdown-parser
+        base ^>=4.17.2.1
+        , markdown-parser
+        , hspec
+        , text

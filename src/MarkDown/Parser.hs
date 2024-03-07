@@ -10,17 +10,17 @@ atom :: Parser MarkDown
 atom = do
     choice [
           parseHeading
-        , parseLineQuotes
-        , parseHorizontalLine
-        , parseOrderedList
-        , parseUnorderedList
-        , parseEscapeCode
-        , try parseLine
         , try parseItalicBold
         , try parseBold
         , try parseItalic
         , try parseLink
+        , try parseLine
         , try parseCode
+        , parseHorizontalLine
+        , parseLineQuotes
+        , parseOrderedList
+        , parseUnorderedList
+        , parseEscapeCode
         , parseParagraph
         ]
 
