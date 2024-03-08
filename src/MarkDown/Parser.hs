@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MarkDown.Parser where
+module MarkDown.Parser (module MarkDown.Parser,module Text.Megaparsec) where
 
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -10,24 +10,17 @@ atom :: Parser MarkDown
 atom = do
     choice [
           parseHeading
-        , try parseItalicBold
-        , try parseBold
-        , try parseItalic
-        , try parseLink
-        , try parseLine
-        , try parseCode
         , parseHorizontalLine
         , parseLineQuotes
         , parseOrderedList
         , parseUnorderedList
-        , parseEscapeCode
-        , parseParagraph
+        , parseLine
         ]
 
 parseLine :: Parser MarkDown
 parseLine = do
     res <- takeWhileP Nothing (/= '\n')
-    let x = parse ((parseItalicBold <|> parseBold <|> parseItalic <|> parseLink <|> parseEscapeCode <|>  parseCode <|> parseText) `sepBy` (char ' ')) "" res
+    let x = parse ((try parseItalicBold <|> try parseBold <|> try parseItalic <|>  try parseLink <|> try parseEscapeCode <|>  try parseCode <|> try parseText) `sepBy` (char ' ')) "" res
     case x of
       Left _ -> return (MLine [MParagraph res])
       Right r -> return (MLine r)
@@ -46,11 +39,6 @@ parseHeading = do
     case parse atom "" headingText of
         Left _ -> pure (MHeading (MWord headingText) (T.length res + 1)) 
         Right r -> pure (MHeading r (T.length res + 1))
-
-parseParagraph :: Parser MarkDown
-parseParagraph = do
-    res <- takeWhileP Nothing (/= '\n')
-    pure (MParagraph res)
 
 parseBold :: Parser MarkDown
 parseBold = do
@@ -73,7 +61,7 @@ parseItalicBold = do
 parseLineQuotes :: Parser MarkDown
 parseLineQuotes = do
     _ <- char '>'
-    space
+    _ <- space
     res <- takeWhileP Nothing (/= '\n')
     case parse atom "" res of
         Left _ -> pure (MLineQuotes $ MParagraph res)
@@ -118,4 +106,5 @@ parseEscapeCode = do
 parseHorizontalLine :: Parser MarkDown
 parseHorizontalLine = do
     _ <- string "---" <|> string "***"
+    _ <- char '\n' 
     pure MHorizontal
