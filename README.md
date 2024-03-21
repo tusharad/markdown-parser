@@ -19,7 +19,14 @@ To use the Markdown Parser, follow these simple steps:
 
 3. **Run the Parser:**
    ```bash
-   cabal exec markdown-parser inputFile.md outputFile.html
+   cabal run
+   ```
+4. **Send POST request with JSON Data**
+   ```
+ curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"message": "# Hello\n## There."}' \
+  http://localhost:3000/toHTML
    ```
 
    Replace `inputFile.md` with the path to your markdown file and `outputFile.html` with the desired name for the HTML output.

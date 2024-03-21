@@ -64,6 +64,7 @@ library
                     , MarkDown.Parser
                     , MarkDown.ToHTML
                     , MarkDown.Helper
+                    , MarkDown.HTTP.Core
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -75,6 +76,8 @@ library
     build-depends:    base ^>=4.17.2.1
                     , megaparsec
                     , text
+                    , scotty
+                    , aeson
 
     -- Directories containing source files.
     hs-source-dirs:   src

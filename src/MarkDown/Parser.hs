@@ -5,6 +5,18 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import MarkDown.Common.Types
 import qualified Data.Text as T
+import MarkDown.Helper
+import MarkDown.ToHTML
+
+processMD :: InputMarkDown -> IO T.Text
+processMD inputText = do
+     let res = parse (atom `sepBy` newline) "" (message inputText)
+     case res of
+       Left err -> (print err) >> pure "Parsing failed!"
+       Right parsedStructure -> do
+         let x = joinMWord (joinMLine (concatParagraphs (concatTexts parsedStructure []) []) []) []
+         let y = concatParagraphs x []
+         pure (toHTML y)
 
 atom :: Parser MarkDown
 atom = do

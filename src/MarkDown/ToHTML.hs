@@ -13,7 +13,7 @@ eval md = case md of
   MItalic txt        -> "<italic>" <> txt <> "</italic>"
   MItalicBold txt    -> "<italic><strong>" <> txt <> "</strong></italic>"
   MLineQuotes md'    -> "<span>" <> helper md' "" <> "</span>"
-  MHorizontal        -> "<hr>"  
+  MHorizontal        -> "<hr>"
   MOrderedList md'   -> "<li>" <> helper md' "" <> "</li>"
   MUnOrderedList md' -> "<li>" <> helper md' "" <> "</li>"
   MCode txt          -> "<code>" <> txt <> "</code>"
@@ -25,7 +25,7 @@ eval md = case md of
   _                  -> "Something went wrong"
 
 helper :: MarkDown -> T.Text -> T.Text
-helper md txt = (eval md <> " " <> txt)
+helper md txt = eval md <> " " <> txt
 
 toHTML :: [MarkDown] -> T.Text
 toHTML = foldr helper ""
