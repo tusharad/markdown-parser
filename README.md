@@ -22,14 +22,13 @@ To use the Markdown Parser, follow these simple steps:
    cabal run
    ```
 4. **Send POST request with JSON Data**
+   ```bash
+   curl -X POST \
+   -H "Content-Type: application/json" \
+   -d '{"message": "# Hello\n## There."}' \
+   http://localhost:3000/toHTML
    ```
- curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"message": "# Hello\n## There."}' \
-  http://localhost:3000/toHTML
-   ```
-
-   Replace `inputFile.md` with the path to your markdown file and `outputFile.html` with the desired name for the HTML output.
+   Output: ```<h1>Hello. </h1> <h2>There. </h2>```
 
 ## Things to Work On
 
