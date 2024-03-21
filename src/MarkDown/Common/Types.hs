@@ -1,8 +1,11 @@
+{-# LANGUAGE DeriveAnyClass #-}
 module MarkDown.Common.Types where
 
 import Data.Text
 import Data.Void (Void)
 import Text.Megaparsec
+import GHC.Generics
+import Data.Aeson
 
 type Parser = Parsec Void Text
 
@@ -25,3 +28,5 @@ data MarkDown =
     | MBlockQuotes   Text
     | MHorizontal
     deriving (Show,Eq)
+
+data InputMarkDown = InputMarkDown { message :: Text } deriving (Show,Generic,FromJSON)
