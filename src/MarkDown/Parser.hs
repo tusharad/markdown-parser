@@ -1,122 +1,230 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MarkDown.Parser (module MarkDown.Parser,module Text.Megaparsec) where
+module MarkDown.Parser where
 
-import Text.Megaparsec
-import Text.Megaparsec.Char
-import MarkDown.Common.Types
+import           Text.Megaparsec
+import           Text.Megaparsec.Char
+import           Data.Text (Text)
 import qualified Data.Text as T
-import MarkDown.Helper
-import MarkDown.ToHTML
+import qualified Data.Text.Internal.Search as T
+import           Data.Void
+import           Control.Monad (void)
+import           Data.Maybe
+import          MarkDown.Common.Types
 
-processMD :: InputMarkDown -> IO T.Text
-processMD inputText = do
-     let res = parse (atom `sepBy` newline) "" (message inputText)
-     case res of
-       Left err -> (print err) >> pure "Parsing failed!"
-       Right parsedStructure -> do
-         let x = joinMWord (joinMLine (concatParagraphs (concatTexts parsedStructure []) []) []) []
-         let y = concatParagraphs x []
-         pure (toHTML y)
 
-atom :: Parser MarkDown
-atom = do
-    choice [
-          parseHeading
-        , parseHorizontalLine
-        , parseLineQuotes
-        , parseOrderedList
-        , parseUnorderedList
-        , parseLine
-        ]
-
-parseLine :: Parser MarkDown
-parseLine = do
-    res <- takeWhileP Nothing (/= '\n')
-    let x = parse ((try parseItalicBold <|> try parseBold <|> try parseItalic <|>  try parseLink <|> try parseEscapeCode <|>  try parseCode <|> try parseText) `sepBy` (char ' ')) "" res
-    case x of
-      Left _ -> return (MLine [MParagraph res])
-      Right r -> return (MLine r)
-
-parseText :: Parser MarkDown
-parseText = do
-    res <- takeWhileP Nothing (/= ' ')
-    return (MWord res)
-
-parseHeading :: Parser MarkDown
+parseHeading :: Parser MarkDownElement
 parseHeading = do
-    _ <- char '#'
-    res <- takeWhileP (Just "number of #'s") (=='#')
-    space
-    headingText <- takeWhileP Nothing (/='\n')
-    case parse atom "" headingText of
-        Left _ -> pure (MHeading (MWord headingText) (T.length res + 1)) 
-        Right r -> pure (MHeading r (T.length res + 1))
+  space
+  hashes <- takeWhile1P Nothing (=='#')
+  let cnt = T.length hashes
+  MHeading cnt <$> parseLine
 
-parseBold :: Parser MarkDown
-parseBold = do
-    res <- between (string "**") (string "**")  (takeWhileP Nothing (/= '*')) <|>
-            between (string "__") (string "__")  (takeWhileP Nothing (/= '_'))
-    return (MBold res)
+parseListItem :: Parser a -> Parser MListItem
+parseListItem numberingParser = do
+  space
+  void numberingParser
+  content <- takeWhile1P Nothing (/='\n')
+  subItems <- optional $ try (some (newline >> char ' ' >> char ' ' >> parseLine))
+  void $ optional $ newline
+  case parseMaybe parseLine content of
+    Nothing -> return $ MListItem (Only content) $ fromMaybe [] subItems
+    Just parsedContent -> return $ MListItem parsedContent $ fromMaybe [] subItems
 
-parseItalic :: Parser MarkDown
-parseItalic = do
-    res <- between (char '*') (char '*') (takeWhileP Nothing (/= '*')) <|>
-            between (char '_') (char '_') (takeWhileP Nothing (/= '_'))
-    pure (MItalic res)
+parseOrderedList :: Parser MarkDownElement
+parseOrderedList = MOrderedList <$> some (parseListItem (some digitChar >> char '.'))
 
-parseItalicBold :: Parser MarkDown
-parseItalicBold = do
-    res <- between (string "***") (string "***") (takeWhileP Nothing (/= '*')) <|>
-            between (string "___") (string "___") (takeWhileP Nothing (/= '_'))
-    pure (MItalicBold res)
+parseUnorderedList :: Parser MarkDownElement
+parseUnorderedList = MUnorderedList <$> some (parseListItem (char '-'))
 
-parseLineQuotes :: Parser MarkDown
-parseLineQuotes = do
-    _ <- char '>'
-    _ <- space
-    res <- takeWhileP Nothing (/= '\n')
-    case parse atom "" res of
-        Left _ -> pure (MLineQuotes $ MParagraph res)
-        Right r -> pure (MLineQuotes r)
+-- To create a line break or new line (<br>), end a line with two or more 
+-- spaces, and then type return.
+parseParagraph :: Parser MarkDownElement
+parseParagraph = do
+  space
+  content <- takeWhile1P Nothing (/='\n')
+  return $ MParagraph (Only content)
 
-parseOrderedList :: Parser MarkDown
-parseOrderedList = do
-    _ <- some digitChar
-    _ <- char '.'
-    space
-    res <- takeWhileP Nothing (/='\n')
-    case parse parseLine "" res of
-        Left _ -> pure (MOrderedList (MWord res))
-        Right r -> pure (MOrderedList r)
+parseBoldItalic :: Parser MarkDownElement
+parseBoldItalic = space >> parseBold_  "***" <|> parseBold_ "___"
+  where
+    parseBold_ str = do
+      space
+      void $ string str
+      content <- lookAhead $ takeWhile1P Nothing (/='\n')
+      let res = T.indices str content
+      case res of
+        []    -> parseError (TrivialError 1 Nothing mempty)  -- if the ending ** is not found, parseBold will fail
+        (indexOfStarStar:_) -> do
+          void $ takeP Nothing indexOfStarStar
+          void $ string str
+          let contentWithoutStarStar = T.take indexOfStarStar content
+          case parseMaybe parseLineForBold contentWithoutStarStar of
+            Nothing -> return $ MBoldItalic (Only contentWithoutStarStar)
+            Just x -> return $ MBoldItalic x
 
-parseUnorderedList :: Parser MarkDown
-parseUnorderedList = do
-    _ <- char '*' <|> char '-' <|> char '+'
-    space
-    res <- takeWhileP Nothing (/='\n')
-    case parse parseLine "" res of
-        Left _ -> pure (MUnOrderedList (MWord res))
-        Right r -> pure (MUnOrderedList r)
+parseBold :: Parser MarkDownElement
+parseBold = space >> parseBold_  "**" <|> parseBold_ "__"
+  where
+    parseBold_ str = do
+      space
+      void $ string str
+      content <- lookAhead $ takeWhile1P Nothing (/='\n')
+      let res = T.indices str content
+      case res of
+        []    -> parseError (TrivialError 1 Nothing mempty)  -- if the ending ** is not found, parseBold will fail
+        (indexOfStarStar:_) -> do
+          void $ takeP Nothing indexOfStarStar
+          void $ string str
+          let contentWithoutStarStar = T.take indexOfStarStar content
+          case parseMaybe parseLineForBold contentWithoutStarStar of
+            Nothing -> return $ MBold (Only contentWithoutStarStar)
+            Just x -> return $ MBold x
 
-parseLink :: Parser MarkDown
+parseItalic :: Parser MarkDownElement
+parseItalic = space >> go '*' <|> go '_'
+  where
+    go ch = do
+      space
+      void $ char ch
+      content <- lookAhead $ takeWhile1P Nothing (/='\n')
+      let mRes = T.findIndex (==ch) content
+      case mRes of
+        Nothing    -> parseError (TrivialError 1 Nothing mempty)  -- if the ending ** is not found, parseBold will fail
+        Just indexOfStarStar -> do
+          void $ takeP Nothing indexOfStarStar
+          void $ char ch
+          let contentWithoutStarStar = T.take indexOfStarStar content
+          case parseMaybe parseLineForBold contentWithoutStarStar of
+            Nothing -> return $ MItalic (Only contentWithoutStarStar)
+            Just x -> return $ MItalic x
+
+
+parseImage :: Parser MarkDownElement
+parseImage = do
+  space
+  void $ char '!'
+  imageText <- between (char '[') (char ']') parseLineForImage
+  imageSrc <- between (char '(') (char ')') (takeWhileP Nothing (/=')'))
+  return $ MImage imageText (T.unpack imageSrc)
+
+-- Make sure to put parseLink behind parseImage
+-- Since every link will be parsed by image
+parseLink :: Parser MarkDownElement
 parseLink = do
-    _ <- char '!'
-    alt <- between (char '[') (char ']') (takeWhileP Nothing (/=']'))
-    path <-  between (char '(') (char ')') (takeWhileP Nothing (/=')'))
-    pure (MLink alt path)
+  space
+  linkText <- between (char '[') (char ']') parseLineForLink
+  linkURL <- between (char '(') (char ')') (takeWhileP Nothing (/=')'))
+  space
+  return $ MLink linkText linkURL
 
-parseCode :: Parser MarkDown
-parseCode = do
-    res <- between (char '`') (char '`') (takeWhileP Nothing (/='`'))
-    pure (MCode res)
+excludeCharacters :: [Char]
+excludeCharacters = [
+    '#'
+  , '!'
+  , '\n'
+  , '_'
+  , '*'
+  , '['
+  , ']'
+  ]
 
-parseEscapeCode :: Parser MarkDown
-parseEscapeCode = do
-    res <- between (string "``") (string "``") (takeWhileP Nothing (/='`'))
-    pure (MEscapeCode ("`" <> res <> "`"))
+parseOnly :: Parser MarkDownElement
+parseOnly = do
+  space
+  content <- takeWhile1P Nothing (`notElem` excludeCharacters)
+  return $ Only content
 
-parseHorizontalLine :: Parser MarkDown
-parseHorizontalLine = do
-    _ <- string "---" <|> string "***"
-    _ <- char '\n' 
-    pure MHorizontal
+parseLine :: Parser MarkDownElement
+parseLine = MLine <$> some (choice parserList)
+
+parseLineForImage :: Parser MarkDownElement
+parseLineForImage = MLine <$> some (choice parserListForImage)
+
+parseLineForLink :: Parser MarkDownElement
+parseLineForLink = MLine <$> some (choice parserListForLink)
+
+
+parseLineForItalic :: Parser MarkDownElement
+parseLineForItalic = MLine <$> some (choice parserListForItalic)
+
+parseLineForBold :: Parser MarkDownElement
+parseLineForBold = MLine <$> some (choice parserListForBold)
+
+parseEverythingTillStarOrUnderscore :: Parser MarkDownElement
+parseEverythingTillStarOrUnderscore = do
+  content <- takeWhile1P Nothing (\x -> (x/='*') && (x/='\n') && (x/='_'))
+  return $ Only content
+
+parserList :: [Parser MarkDownElement]
+parserList = [
+        try parseBoldItalic
+      , try parseBold
+      , try parseItalic
+      , try parseUnorderedList
+      , try parseOrderedList
+      , try parseImage
+      , try parseLink
+      , try parseOnly
+      ]
+
+parserListForItalic :: [Parser MarkDownElement]
+parserListForItalic = [
+        try parseBold
+      , try parseImage
+      , try parseUnorderedList
+      , try parseOrderedList
+      , try parseLink
+      , try parseOnly
+      , try parseEverythingTillStarOrUnderscore
+      ]
+
+parserListForBold :: [Parser MarkDownElement]
+parserListForBold = [
+        try parseItalic
+      , try parseImage
+      , try parseUnorderedList
+      , try parseOrderedList
+      , try parseLink
+      , try parseOnly
+      , try parseEverythingTillStarOrUnderscore
+      ]
+
+parserListForImage :: [Parser MarkDownElement]
+parserListForImage = [
+       try parseBoldItalic
+      , try parseBold
+      , try parseItalic
+      , try parseUnorderedList
+      , try parseOrderedList
+      , try parseLink
+      , try parseOnly
+      ]
+
+parserListForLink :: [Parser MarkDownElement]
+parserListForLink = [
+        try parseBoldItalic
+      , try parseBold
+      , try parseItalic
+      , try parseUnorderedList
+      , try parseOrderedList
+      , try parseImage
+      , try parseOnly
+      ]
+
+
+mainParser :: Parser MarkDownElement
+mainParser = choice [
+                try parseHeading
+              , try parseLine
+              , try parseBoldItalic
+              , try parseBold
+              , try parseItalic
+              , try parseUnorderedList
+              , try parseOrderedList
+              , try parseImage
+              , try parseLink
+              , try parseParagraph
+              ]
+
+test :: IO ()
+test = putStrLn "Hello World!"

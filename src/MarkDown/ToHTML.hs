@@ -1,31 +1,29 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE  QuasiQuotes #-}
 module MarkDown.ToHTML where
 
 import           MarkDown.Common.Types
 import qualified Data.Text as T
+import  Data.Text (Text)
 
-eval :: MarkDown -> T.Text
-eval md = case md of
-  MHeading txt n     -> T.pack $ "<h" <> show n <> ">" <> T.unpack (eval txt) <> "</h" <> show n <> ">"
-  MLine mdList       -> toHTML mdList
-  MBold txt          -> "<strong>" <> txt <> "</strong>"
-  MItalic txt        -> "<italic>" <> txt <> "</italic>"
-  MItalicBold txt    -> "<italic><strong>" <> txt <> "</strong></italic>"
-  MLineQuotes md'    -> "<span>" <> helper md' "" <> "</span>"
-  MHorizontal        -> "<hr>"
-  MOrderedList md'   -> "<li>" <> helper md' "" <> "</li>"
-  MUnOrderedList md' -> "<li>" <> helper md' "" <> "</li>"
-  MCode txt          -> "<code>" <> txt <> "</code>"
-  MEscapeCode txt    -> "<span>" <> txt <> "</span>"
-  MLink txt link     -> "<a href=\"" <> link <> "\">" <> txt <> "</a>"
-  MImage txt link    -> "<a href=\"" <> link <> "\">" <> txt <> "</a>"
-  MParagraph txt     -> "<p>" <> txt <> "</p>"
-  MWord txt          -> txt
-  _                  -> "Something went wrong"
+toHTML :: [MarkDownElement] -> Text
+toHTML = foldr (\x acc -> toHTMLHelper x <> acc) ""
 
-helper :: MarkDown -> T.Text -> T.Text
-helper md txt = eval md <> " " <> txt
+toHTMLHelper :: MarkDownElement -> Text
+toHTMLHelper (MHeading n md) = "<h" <> T.pack (show n) <> ">"
+    <> toHTMLHelper md <> "</h" <> T.pack (show n) <> ">"
+toHTMLHelper (MParagraph md) = "<p>" <> toHTMLHelper md <> "</p>"
+toHTMLHelper (MBold md) = "<strong>" <> toHTMLHelper md <> "</strong>"
+toHTMLHelper (MItalic md) = "<i>" <> toHTMLHelper md <> "</i>"
+toHTMLHelper (MBoldItalic md) = "<strong><i>" <> toHTMLHelper md <> "</i></strong>"
+toHTMLHelper (MImage md filePath) = "<img src=\"" <> T.pack filePath <> "\" />"
+toHTMLHelper (MLink md link) = "<a href=\"" <> link <> "\">" <> toHTMLHelper md <> "</a>"
+toHTMLHelper (MLine md) = toHTML md
+toHTMLHelper (MUnorderedList itemList) = "<ol>" <> itemToHTML itemList <> "</ol>"
+toHTMLHelper (MOrderedList itemList) = "<ul>" <> itemToHTML itemList <> "</ul>"
+toHTMLHelper (Only txt) = txt
 
-toHTML :: [MarkDown] -> T.Text
-toHTML = foldr helper ""
+itemToHTML :: [MListItem] -> Text
+itemToHTML = foldr (\x acc -> "<li>" <> itemToHTML_ x <> "</li>" <> acc) ""
+
+itemToHTML_ :: MListItem -> Text
+itemToHTML_ (MListItem md mds) = toHTMLHelper md <> toHTML mds
